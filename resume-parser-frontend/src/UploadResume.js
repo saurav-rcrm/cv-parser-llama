@@ -343,7 +343,7 @@ const UploadResume = () => {
     files.forEach(f => fd.append('resumes', f));
     try {
       const res = await axios.post(
-        'http://localhost:3002/upload',
+        'https://cv-parser-llama.onrender.com/upload',
         fd,
         { headers: { 'Content-Type':'multipart/form-data' } }
       );
