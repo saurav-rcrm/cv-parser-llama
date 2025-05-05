@@ -57,6 +57,7 @@ async function parseResumeWithLLAMA(resumeText) {
        "xing": ""
      },
      "summary": "",
+     "educationalQualification": "",
      "workHistory": [
        {
          "title": "Director",
@@ -65,7 +66,7 @@ async function parseResumeWithLLAMA(resumeText) {
          "salary": "",
          "is_currently_working": false,
          "work_start_date": "",
-         "work_end_date": "Present/end date",
+         "work_end_date": "present/end date",
          "work_description": "",
          "work_company_name": "",
          "work_location": ""
@@ -85,21 +86,17 @@ async function parseResumeWithLLAMA(resumeText) {
      ]
    }
 
-2. Determine the language used in the text of the resume and ensure all extracted data values are presented in this language only.
+2. Determine the language used in the text of the resume and ensure all extracted data values are presented in this language.
 
 3. Ensure "education_description" and "work_description" are the exact verbatim text from the resume and not generated.
 
 4. Provide only the output strictly in JSON format without any additional comment, character like # or triple backticks or text.
 
-5. Identify and include all relevant skills based on work experience, education, certifications, tech stacks, and any additional details from the resume in the "skills" section. Use LinkedIn's skills taxonomy.
+5. Generate additional relevant skills inspired by the work experience, education, certification, any other details from the resume in "skills". Use skills taxonomy.
 
-6. Provide separate JSON responses for each entry in the work and education history, even if work or education is present and not in the past.
+6. Provide separate JSON responses for each entry in the work and education history.
 
-7. Detailed Candidate 'summary' should be written in third person highlighting experience, industry, core skills and in the language of the resume.
-
-8. Give accurare Total Experience based on calculations.
-
-9. Establish a chain of thought to parse the resume accurately and add that in a json key 'reasoning'.
+7. Candidate 'summary' should be written in third person highlighting experience, industry, and core skills.
 
 `;
 
@@ -115,9 +112,9 @@ async function parseResumeWithLLAMA(resumeText) {
         content: resumeText
       }
     ],
-    temperature: 0.7,
+    temperature: 1,
     max_completion_tokens: 7000,
-    top_p: 0.7,
+    top_p: 1,
     stream: false,
     response_format: {
       type: "json_object"
