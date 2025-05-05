@@ -224,23 +224,29 @@ const ResumeDetails = ({ resume, file }) => {
           <Grid container spacing={2}>
             {/* Work History */}
             <Grid item xs={12} md={8}>
-              <Typography variant="subtitle2" sx={{ display:'flex', alignItems:'center', mb:1 }}>
-                <Work fontSize="small" sx={{ mr:0.5 }} /> Work History
-              </Typography>
-              <Paper variant="outlined" sx={{ p:2, mb:2 }}>
-                {data.workHistory?.map((job, i) => (
-                  <Box key={i} sx={{ mb:2 }}>
-                    <Typography variant="body2" fontWeight="bold">
-                      {job.title} at {job.work_company_name || 'Not Available'}
-                    </Typography>
-                    <Typography variant="caption" display="block" gutterBottom>
-                      {job.work_start_date || 'Start Date Unavailable'} – {job.work_end_date || 'End Date Unavailable'}
-                    </Typography>
-                    <Typography variant="body2">{job.work_description}</Typography>
-                  </Box>
-                ))}
-              </Paper>
+  <Typography variant="subtitle2" sx={{ display:'flex', alignItems:'center', mb:1 }}>
+    <Work fontSize="small" sx={{ mr:0.5 }} /> Work History
+  </Typography>
+  <Paper variant="outlined" sx={{ p:2, mb:2 }}>
+    {data.workHistory?.map((job, i) => {
+      // NEW ➜ decide what to show after the dash
+      const endLabel = job.is_currently_working
+        ? 'Present'
+        : (job.work_end_date || 'End Date Unavailable');
 
+      return (
+        <Box key={i} sx={{ mb:2 }}>
+          <Typography variant="body2" fontWeight="bold">
+            {job.title} at {job.work_company_name || 'Not Available'}
+          </Typography>
+          <Typography variant="caption" display="block" gutterBottom>
+            {job.work_start_date || 'Start Date Unavailable'} – {endLabel}
+          </Typography>
+          <Typography variant="body2">{job.work_description}</Typography>
+        </Box>
+      );
+    })}
+  </Paper>
               {/* Education */}
               <Typography variant="subtitle2" sx={{ display:'flex', alignItems:'center', mb:1 }}>
                 <School fontSize="small" sx={{ mr:0.5 }} /> Education
