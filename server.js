@@ -32,9 +32,7 @@ const stripCodeFences = (text) => {
 // Function to call the Together.xyz LLAMA API and parse resume text into structured JSON
 async function parseResumeWithLLAMA(resumeText) {
   const promptText = `Parse the provided resume text to extract information and categorize it according to the specified fields below. Ensure clarity and attention to detail while following the provided guidelines. The data values in the output should reflect the language used in the resume text.
-
 1. Parse the following fields from the:
-
    {
      "firstName": "",
      "lastName": "",
@@ -96,9 +94,7 @@ async function parseResumeWithLLAMA(resumeText) {
 
 6. Provide separate JSON responses for each entry in the work and education history.
 
-7. Candidate 'summary' should be written in third person highlighting experience, industry, and core skills.
-
-`;
+7. Candidate 'summary' should be written in third person highlighting experience, industry, and core skills.`;
 
   const payload = {
     model: "meta-llama/llama-4-scout-17b-16e-instruct",
