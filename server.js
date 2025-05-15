@@ -93,7 +93,7 @@ async function parseResumeWithLLAMA(resumeText) {
 
 5. Identify and include all relevant skills based on work experience, education, certifications, tech stacks, and any additional details from the resume in the "skills" section. Use LinkedIn's skills taxonomy.
 
-6. Provide separate JSON responses for each entry in the work and education history, even if work or education is present and not in the past.
+6. Provide separate JSON responses for each entry in the work and education history, even if work or education is present and not in the past. Always use the JSON format specified and never deviate from it.
 
 7. Detailed Candidate 'summary' should be written in third person highlighting experience, industry, core skills and in the language of the resume.
 
