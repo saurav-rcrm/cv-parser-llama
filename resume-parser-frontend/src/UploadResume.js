@@ -24,7 +24,8 @@ import {
   ListItemIcon,
   ListItemText,
   Stack,
-  TextField
+  TextField,
+  Collapse
 } from '@mui/material';
 import {
   CloudUpload,
@@ -37,7 +38,9 @@ import {
   Email,
   Phone,
   LocationOn,
-  EmojiPeople
+  EmojiPeople,
+  ExpandMore,
+  ExpandLess
 } from '@mui/icons-material';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import GitHubIcon   from '@mui/icons-material/GitHub';
@@ -338,6 +341,7 @@ const UploadResume = () => {
   const [result, setResult]           = useState(null);
   const [loading, setLoading]         = useState(false);
   const [clientTime, setClientTime]   = useState(null);
+  const [costMetricsExpanded, setCostMetricsExpanded] = useState(false);
 
   const onChange = e => setFiles(Array.from(e.target.files));
 
@@ -408,12 +412,23 @@ const UploadResume = () => {
 
             {result?.resumes?.[0] && (
               <Paper sx={{ p:2}}>
-                <Typography variant="subtitle2" gutterBottom>Cost Metrics</Typography>
-                <List dense>
-                  <ListItem><ListItemText primary="LLAMA Cost"   secondary={`$${result.resumes[0].estimatedCost}`}/></ListItem>
-                  <ListItem><ListItemText primary="Sovren Cost"  secondary={`$${result.resumes[0].sovrenComparison.sovrenCost.toFixed(4)}`}/></ListItem>
-                  <ListItem><ListItemText primary="Savings"      secondary={`$${result.resumes[0].sovrenComparison.savings} (${result.resumes[0].sovrenComparison.savingsPercentage}%)`}/></ListItem>
-                </List>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="subtitle2" gutterBottom sx={{ mb: 0 }}>Cost Metrics</Typography>
+                  <IconButton
+                    size="small"
+                    onClick={() => setCostMetricsExpanded(!costMetricsExpanded)}
+                    sx={{ transform: costMetricsExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
+                  >
+                    <ExpandMore />
+                  </IconButton>
+                </Box>
+                <Collapse in={costMetricsExpanded}>
+                  <List dense>
+                    <ListItem><ListItemText primary="LLAMA Cost"   secondary={`$${result.resumes[0].estimatedCost}`}/></ListItem>
+                    <ListItem><ListItemText primary="Sovren Cost"  secondary={`$${result.resumes[0].sovrenComparison.sovrenCost.toFixed(4)}`}/></ListItem>
+                    <ListItem><ListItemText primary="Savings"      secondary={`$${result.resumes[0].sovrenComparison.savings} (${result.resumes[0].sovrenComparison.savingsPercentage}%)`}/></ListItem>
+                  </List>
+                </Collapse>
               </Paper>
             )}
           </Grid>

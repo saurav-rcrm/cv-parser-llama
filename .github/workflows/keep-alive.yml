@@ -3,7 +3,7 @@ name: Keep Render Backend Awake
 # Every 50 minutes, plus allow manual runs
 on:
   schedule:
-    - cron:  '*/50 * * * *'
+    - cron:  '*/55 * * * *'
   workflow_dispatch:
 
 jobs:
