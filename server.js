@@ -20,6 +20,22 @@ app.use(cors());
 // Configure multer to temporarily store uploaded files in the "uploads" folder
 const upload = multer({ dest: "uploads/" });
 
+// Available models configuration
+const AVAILABLE_MODELS = {
+  "openai/gpt-oss-20b": {
+    name: "gpt-20B",
+    displayName: "GPT-20B",
+    provider: "groq",
+    isDefault: true
+  },
+  "meta-llama/llama-4-scout-17b-16e-instruct": {
+    name: "llama-4-scout",
+    displayName: "Llama 4 Scout",
+    provider: "groq",
+    isDefault: false
+  }
+};
+
 // Utility function to remove markdown code fences if present
 const stripCodeFences = (text) => {
   if (text.startsWith("```")) {
@@ -29,8 +45,8 @@ const stripCodeFences = (text) => {
   return text;
 };
 
-// Function to call the Together.xyz LLAMA API and parse resume text into structured JSON
-async function parseResumeWithLLAMA(resumeText) {
+// Function to call the Groq API and parse resume text into structured JSON
+async function parseResumeWithModel(resumeText, modelId) {
   const promptText = `Parse the provided resume text to extract information and categorize it according to the specified fields below. Ensure clarity and attention to detail while following the provided guidelines. The data values in the output should reflect the language used in the resume text.
 
 1. Parse the following fields from the:
@@ -101,10 +117,12 @@ async function parseResumeWithLLAMA(resumeText) {
 
 9. Establish a chain of thought to parse the resume accurately and add that in a json key 'reasoning'.
 
+10. Recognize and normalize language-specific phrases indicating tenure (e.g., “12 ans,” "Mai à aôut 2019," “seit 5 Jahren,” "Depuis 2000," “desde 2013”), or separated date components (e.g., "Janvier - Juin 2019", "Jan", "2019") to accurately calculate start and end dates for work experience or education.
+
 `;
 
   const payload = {
-    model: "meta-llama/llama-4-scout-17b-16e-instruct",
+    model: modelId,
     messages: [
       {
         role: "system",
@@ -136,22 +154,43 @@ async function parseResumeWithLLAMA(resumeText) {
         },
       }
     );
-    console.log("Raw Groq API response:", response.data.choices[0].message.content);
+    console.log(`Raw Groq API response for ${modelId}:`, response.data.choices[0].message.content);
     const parsedContent = response.data.choices[0].message.content.trim();
     const usage = response.data.usage; // expected to include prompt_tokens, completion_tokens, total_tokens
-    return { content: parsedContent, usage: usage };
+    return { content: parsedContent, usage: usage, model: modelId };
   } catch (error) {
     console.error(
-      "Error from Groq API:",
+      `Error from Groq API for ${modelId}:`,
       error.response ? error.response.data : error.message
     );
-    return { content: null, usage: null };
+    return { content: null, usage: null, model: modelId, error: error.message };
   }
 }
+
+// Endpoint to get available models
+app.get("/models", (req, res) => {
+  res.json({ 
+    success: true, 
+    models: Object.entries(AVAILABLE_MODELS).map(([id, config]) => ({
+      id,
+      ...config
+    }))
+  });
+});
 
 // Endpoint to handle file uploads and processing
 app.post("/upload", upload.array("resumes"), async (req, res) => {
   try {
+    const { modelId, comparisonMode } = req.body;
+    
+    // Validate model ID
+    if (!modelId || !AVAILABLE_MODELS[modelId]) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid model ID" 
+      });
+    }
+
     const parsedResumes = [];
 
     // Process each uploaded file
@@ -180,9 +219,9 @@ app.post("/upload", upload.array("resumes"), async (req, res) => {
         text = "Unsupported file type.";
       }
 
-      // Call the LLAMA API to parse the resume text
+      // Parse with selected model
       const llamaStart = Date.now();
-      const llamaResult = await parseResumeWithLLAMA(text);
+      const llamaResult = await parseResumeWithModel(text, modelId);
       llamaTime = Date.now() - llamaStart;
       const totalTime = Date.now() - tFileStart;
 
@@ -206,6 +245,8 @@ app.post("/upload", upload.array("resumes"), async (req, res) => {
       parsedResumes.push({
         filename: file.originalname,
         data: llamaResult.content,
+        model: modelId,
+        modelName: AVAILABLE_MODELS[modelId].displayName,
         timeMetrics: {
           extractionTime, // in ms
           llamaTime,      // in ms
@@ -217,7 +258,8 @@ app.post("/upload", upload.array("resumes"), async (req, res) => {
           sovrenCost,
           savings,
           savingsPercentage
-        }
+        },
+        error: llamaResult.error || null
       });
 
       // Remove the temporary file
@@ -230,6 +272,100 @@ app.post("/upload", upload.array("resumes"), async (req, res) => {
     res.status(500).json({ success: false, message: "Error processing files." });
   }
 });
+
+// Endpoint for comparison mode - parse with both models
+app.post("/upload/compare", upload.array("resumes"), async (req, res) => {
+  try {
+    const parsedResumes = [];
+
+    // Process each uploaded file
+    for (const file of req.files) {
+      const tFileStart = Date.now();
+      let text = "";
+      let extractionTime = 0;
+
+      // Extract text based on file type
+      if (file.mimetype === "application/pdf") {
+        const extractionStart = Date.now();
+        const dataBuffer = fs.readFileSync(file.path);
+        const data = await pdfParse(dataBuffer);
+        text = data.text;
+        extractionTime = Date.now() - extractionStart;
+      } else if (
+        file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+        file.mimetype === "application/msword"
+      ) {
+        const extractionStart = Date.now();
+        const result = await mammoth.extractRawText({ path: file.path });
+        text = result.value;
+        extractionTime = Date.now() - extractionStart;
+      } else {
+        text = "Unsupported file type.";
+      }
+
+      const modelResults = [];
+      const modelIds = Object.keys(AVAILABLE_MODELS);
+
+      // Parse with all models
+      for (const modelId of modelIds) {
+        const llamaStart = Date.now();
+        const llamaResult = await parseResumeWithModel(text, modelId);
+        const llamaTime = Date.now() - llamaStart;
+
+        // Calculate cost using token usage from the API
+        let estimatedCost = "N/A";
+        if (llamaResult.usage && typeof llamaResult.usage.total_tokens === 'number') {
+          const totalTokens = llamaResult.usage.total_tokens;
+          const cost = (totalTokens * 0.00034) / 1000; // cost in dollars
+          estimatedCost = cost.toFixed(6);
+        }
+
+        // Sovren parsing cost (per candidate) is now $0.007
+        const sovrenCost = 0.007;
+        let savings = "N/A";
+        let savingsPercentage = "N/A";
+        if (estimatedCost !== "N/A") {
+          savings = (sovrenCost - parseFloat(estimatedCost)).toFixed(6);
+          savingsPercentage = (((sovrenCost - parseFloat(estimatedCost)) / sovrenCost) * 100).toFixed(2);
+        }
+
+        modelResults.push({
+          model: modelId,
+          modelName: AVAILABLE_MODELS[modelId].displayName,
+          data: llamaResult.content,
+          timeMetrics: {
+            extractionTime,
+            llamaTime,
+            totalTime: Date.now() - tFileStart
+          },
+          tokenUsage: llamaResult.usage,
+          estimatedCost,
+          sovrenComparison: {
+            sovrenCost,
+            savings,
+            savingsPercentage
+          },
+          error: llamaResult.error || null
+        });
+      }
+
+      parsedResumes.push({
+        filename: file.originalname,
+        models: modelResults,
+        extractionTime
+      });
+
+      // Remove the temporary file
+      fs.unlinkSync(file.path);
+    }
+
+    res.json({ success: true, resumes: parsedResumes });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Error processing files in comparison mode." });
+  }
+});
+
 // health check — keeps the service awake
 app.get('/health', (req, res) => res.send('OK'));
 app.listen(port, () => {

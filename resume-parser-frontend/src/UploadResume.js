@@ -25,7 +25,19 @@ import {
   ListItemText,
   Stack,
   TextField,
-  Collapse
+  Collapse,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Switch,
+  FormControlLabel,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   CloudUpload,
@@ -40,8 +52,11 @@ import {
   LocationOn,
   EmojiPeople,
   ExpandMore,
-  ExpandLess
+  ExpandLess,
+  Settings,
+  CompareArrows
 } from '@mui/icons-material';
+import { Tooltip } from '@mui/material';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import GitHubIcon   from '@mui/icons-material/GitHub';
 import TwitterIcon  from '@mui/icons-material/Twitter';
@@ -255,16 +270,174 @@ const calculateAverageTenure = (workHistory) => {
   }
 };
 
-// Top-level header bar
-const Header = () => (
+// Top-level header bar with settings button
+const Header = ({ onSettingsClick }) => (
   <AppBar position="static" color="primary">
     <Toolbar>
-      <Typography variant="h6">LLM Resume Parser – built by Saurav</Typography>
+      <Typography variant="h6" sx={{ flexGrow: 1 }}>LLM Resume Parser – built by Saurav</Typography>
+      <IconButton color="inherit" onClick={onSettingsClick}>
+        <Settings />
+      </IconButton>
     </Toolbar>
   </AppBar>
 );
 
-const ResumeDetails = ({ resume, file }) => {
+// Comparison Resume View Component
+const ComparisonResumeView = ({ resume, file, filename }) => {
+  const [selectedTab, setSelectedTab] = useState(0);
+
+  const handleTabChange = (event, newValue) => {
+    setSelectedTab(newValue);
+  };
+
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
+        {filename} - Model Comparison
+      </Typography>
+      <Tabs 
+        value={selectedTab} 
+        onChange={handleTabChange} 
+        sx={{ 
+          mb: 2,
+          '& .MuiTab-root': {
+            minWidth: 'auto',
+            textTransform: 'none',
+            fontWeight: 'medium'
+          }
+        }}
+        variant="fullWidth"
+      >
+        {resume.models.map((model, modelIndex) => (
+          <Tab 
+            key={modelIndex} 
+            label={model.modelName} 
+            sx={{ 
+              textTransform: 'none',
+              fontSize: '0.9rem'
+            }}
+          />
+        ))}
+      </Tabs>
+      {resume.models.map((model, modelIndex) => (
+        <Box key={modelIndex} sx={{ display: modelIndex === selectedTab ? 'block' : 'none' }}>
+          <ResumeDetails 
+            resume={{
+              filename: filename,
+              data: model.data,
+              model: model.model,
+              modelName: model.modelName,
+              timeMetrics: model.timeMetrics,
+              tokenUsage: model.tokenUsage,
+              estimatedCost: model.estimatedCost,
+              sovrenComparison: model.sovrenComparison,
+              error: model.error
+            }} 
+            file={file}
+            isComparisonMode={true}
+          />
+        </Box>
+      ))}
+    </Box>
+  );
+};
+
+// Settings Dialog Component
+const SettingsDialog = ({ open, onClose, settings, onSettingsChange }) => {
+  const [availableModels, setAvailableModels] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      fetchAvailableModels();
+    }
+  }, [open]);
+
+  // Fallback models if API fails
+  const fallbackModels = [
+    { id: "openai/gpt-oss-20b", displayName: "GPT-20B" },
+    { id: "meta-llama/llama-4-scout-17b-16e-instruct", displayName: "Llama 4 Scout" }
+  ];
+
+  const fetchAvailableModels = async () => {
+    setLoading(true);
+    try {
+      console.log('Fetching models from:', 'https://cv-parser-llama.onrender.com/models');
+      const response = await axios.get('https://cv-parser-llama.onrender.com/models');
+      console.log('Models response:', response.data);
+      if (response.data.success) {
+        setAvailableModels(response.data.models);
+        console.log('Available models set:', response.data.models);
+      }
+    } catch (error) {
+      console.error('Error fetching models:', error);
+      console.error('Error details:', error.response?.data || error.message);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Settings</DialogTitle>
+      <DialogContent>
+        <Stack spacing={3} sx={{ mt: 1 }}>
+          {/* Model Selection */}
+          <FormControl fullWidth>
+            <InputLabel>Default Model</InputLabel>
+            <Select
+              value={settings.selectedModel}
+              label="Default Model"
+              onChange={(e) => onSettingsChange({ ...settings, selectedModel: e.target.value })}
+              disabled={loading}
+            >
+              {loading ? (
+                <MenuItem disabled>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CircularProgress size={16} />
+                    Loading models...
+                  </Box>
+                </MenuItem>
+              ) : (
+                (availableModels.length > 0 ? availableModels : fallbackModels).map((model) => (
+                  <MenuItem key={model.id} value={model.id}>
+                    {model.displayName}
+                  </MenuItem>
+                ))
+              )}
+            </Select>
+            {availableModels.length === 0 && !loading && (
+              <Typography variant="caption" color="warning.main" sx={{ mt: 0.5, display: 'block' }}>
+                Using fallback models. Check console for connection issues.
+              </Typography>
+            )}
+          </FormControl>
+
+          {/* Comparison Mode Toggle */}
+          <FormControlLabel
+            control={
+              <Switch
+                checked={settings.comparisonMode}
+                onChange={(e) => onSettingsChange({ ...settings, comparisonMode: e.target.checked })}
+              />
+            }
+            label="Comparison Mode"
+          />
+          
+          {settings.comparisonMode && (
+            <Typography variant="body2" color="text.secondary">
+              When enabled, resumes will be parsed using both models for comparison.
+            </Typography>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+const ResumeDetails = ({ resume, file, isComparisonMode = false }) => {
   // Debugger for easy debugging
   debugger;
   
@@ -326,6 +499,25 @@ const ResumeDetails = ({ resume, file }) => {
       return { totalExp: { years: 0, months: 0 }, avgTenure: { years: 0, months: 0 } };
     }
   }, [parsedData?.workHistory]);
+
+  // Check for parsing errors
+  if (resume.error) {
+    return (
+      <Card variant="outlined" sx={{ mt: 2 }}>
+        <CardContent>
+          <Typography variant="h6" color="error" gutterBottom>
+            Parsing Error - {resume.modelName || 'Unknown Model'}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Error: {resume.error}
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            The resume could not be parsed by this model. Please try again or use a different model.
+          </Typography>
+        </CardContent>
+      </Card>
+    );
+  }
 
   // If data is not parsed yet, show loading
   if (!parsedData) {
@@ -403,6 +595,7 @@ const ResumeDetails = ({ resume, file }) => {
           py:             1
         }}>
           <Box>
+            {/* Model indicator removed in comparison mode since it's shown in tabs */}
             <Typography variant="h6">
               {data.firstName} {data.lastName}
             </Typography>
@@ -415,6 +608,7 @@ const ResumeDetails = ({ resume, file }) => {
               ) : (
                 `${experienceData.totalExp.years} yrs, ${experienceData.totalExp.months} mos`
               )}
+              {/* Model indicator removed in comparison mode since it's shown in tabs */}
             </Typography>
             
             {/* inline contact */}
@@ -969,6 +1163,11 @@ const UploadResume = () => {
   const [loading, setLoading]         = useState(false);
   const [clientTime, setClientTime]   = useState(null);
   const [costMetricsExpanded, setCostMetricsExpanded] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState({
+    selectedModel: "openai/gpt-oss-20b", // Default to GPT-20B
+    comparisonMode: false
+  });
 
   const onChange = e => setFiles(Array.from(e.target.files));
 
@@ -978,40 +1177,102 @@ const UploadResume = () => {
     const start = Date.now();
     const fd    = new FormData();
     files.forEach(f => fd.append('resumes', f));
+    
+    // Add settings to form data
+    fd.append('modelId', settings.selectedModel);
+    fd.append('comparisonMode', settings.comparisonMode);
+    
     try {
-      const res = await axios.post(
-        'https://cv-parser-llama.onrender.com/upload',
-        fd,
-        { headers: { 'Content-Type':'multipart/form-data' } }
-      );
+      const endpoint = settings.comparisonMode ? '/upload/compare' : '/upload';
+      const url = `https://cv-parser-llama.onrender.com${endpoint}`;
+      console.log('Uploading to:', url);
+      console.log('Settings:', { modelId: settings.selectedModel, comparisonMode: settings.comparisonMode });
+      
+      const res = await axios.post(url, fd, { headers: { 'Content-Type':'multipart/form-data' } });
+      console.log('Upload response:', res.data);
       setResult(res.data);
       setClientTime(((Date.now()-start)/1000).toFixed(2));
-    } catch {
-      alert('Error parsing resumes');
+    } catch (error) {
+      console.error('Error parsing resumes:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      let errorMessage = 'Error parsing resumes';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      alert(errorMessage);
     }
     setLoading(false);
   };
 
+  const handleSettingsChange = (newSettings) => {
+    setSettings(newSettings);
+  };
+
   return (
     <>
-      <Header/>
+      <Header onSettingsClick={() => setSettingsOpen(true)} />
       <Container maxWidth="lg" sx={{ mt:2, mb:2 }}>
         <Grid container spacing={2}>
           <Grid item xs={12} md={3}>
             <Paper sx={{ p:2, mb:2 }}>
               <Typography variant="h6" gutterBottom>Upload Resumes</Typography>
+              
+              {/* Model Selection Display */}
+              <Box sx={{ mb: 2, p: 1.5, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Current Model: {settings.selectedModel === "openai/gpt-oss-20b" ? "GPT-20B" : "Llama 4 Scout"}
+                </Typography>
+                {settings.comparisonMode && (
+                  <Typography variant="caption" color="primary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <CompareArrows fontSize="small" />
+                    Comparison Mode Active
+                  </Typography>
+                )}
+              </Box>
+              
               <Stack spacing={1}>
                 <Button variant="contained" component="label" startIcon={<CloudUpload />}>
                   Choose Files
                   <input type="file" hidden multiple accept=".pdf,.doc,.docx" onChange={onChange}/>
                 </Button>
                 <Button variant="contained" color="secondary" onClick={onUpload} disabled={loading}>
-                  {loading ? <CircularProgress size={20}/> : 'Parse'}
+                  {loading ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <CircularProgress size={20}/>
+                      {settings.comparisonMode ? 'Parsing with both models...' : 'Parsing...'}
+                    </Box>
+                  ) : (
+                    settings.comparisonMode ? 'Parse & Compare' : 'Parse'
+                  )}
                 </Button>
               </Stack>
               {files.length>0 && (
                 <List dense>
-                  {files.map((f,i)=><ListItem key={i}><ListItemText primary={f.name}/></ListItem>)}
+                  {files.map((f,i)=>(
+                    <Tooltip 
+                      key={i} 
+                      title={f.name} 
+                      placement="top-start"
+                      enterDelay={500}
+                    >
+                      <ListItem sx={{ wordBreak: 'break-word' }}>
+                        <ListItemText 
+                          primary={f.name} 
+                          primaryTypographyProps={{
+                            sx: { 
+                              fontSize: '0.875rem',
+                              lineHeight: 1.2,
+                              wordBreak: 'break-word',
+                              maxWidth: '100%'
+                            }
+                          }}
+                        />
+                      </ListItem>
+                    </Tooltip>
+                  ))}
                 </List>
               )}
             </Paper>
@@ -1020,19 +1281,44 @@ const UploadResume = () => {
               <Paper sx={{ p:2, mb:2 }}>
                 <Typography variant="subtitle2" gutterBottom>Time Metrics</Typography>
                 <List dense>
-                  {[
-                    ['Client-side Time',`${clientTime}s`],
-                    ['Extraction Time',`${(result.resumes[0].timeMetrics.extractionTime/1000).toFixed(2)}s`],
-                    ['LLAMA Time',`${(result.resumes[0].timeMetrics.llamaTime/1000).toFixed(2)}s`],
-                    ['Total Backend Time',`${(result.resumes[0].timeMetrics.totalTime/1000).toFixed(2)}s`]
-                  ].map(([p,s],i)=>(
-                    <ListItem key={i}>
-                      <ListItemIcon sx={{ minWidth:'auto', mr:0.5 }}>
-                        <AccessTime fontSize="small"/>
-                      </ListItemIcon>
-                      <ListItemText primary={p} secondary={s}/>
-                    </ListItem>
-                  ))}
+                  {(() => {
+                    if (settings.comparisonMode && result.resumes[0].models) {
+                      // Comparison mode - show metrics for each model
+                      return result.resumes[0].models.map((model, index) => (
+                        <Box key={index} sx={{ mb: 2 }}>
+                          <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold' }}>
+                            {model.modelName}
+                          </Typography>
+                          {[
+                            ['LLAMA Time',`${(model.timeMetrics.llamaTime/1000).toFixed(2)}s`],
+                            ['Total Backend Time',`${(model.timeMetrics.totalTime/1000).toFixed(2)}s`]
+                          ].map(([p,s],i)=>(
+                            <ListItem key={i} sx={{ pl: 2 }}>
+                              <ListItemIcon sx={{ minWidth:'auto', mr:0.5 }}>
+                                <AccessTime fontSize="small"/>
+                              </ListItemIcon>
+                              <ListItemText primary={p} secondary={s}/>
+                            </ListItem>
+                          ))}
+                        </Box>
+                      ));
+                    } else {
+                      // Single model mode
+                      return [
+                        ['Client-side Time',`${clientTime}s`],
+                        ['Extraction Time',`${(result.resumes[0].timeMetrics.extractionTime/1000).toFixed(2)}s`],
+                        ['LLAMA Time',`${(result.resumes[0].timeMetrics.llamaTime/1000).toFixed(2)}s`],
+                        ['Total Backend Time',`${(result.resumes[0].timeMetrics.totalTime/1000).toFixed(2)}s`]
+                      ].map(([p,s],i)=>(
+                        <ListItem key={i}>
+                          <ListItemIcon sx={{ minWidth:'auto', mr:0.5 }}>
+                            <AccessTime fontSize="small"/>
+                          </ListItemIcon>
+                          <ListItemText primary={p} secondary={s}/>
+                        </ListItem>
+                      ));
+                    }
+                  })()}
                 </List>
               </Paper>
             )}
@@ -1050,20 +1336,64 @@ const UploadResume = () => {
                   </IconButton>
                 </Box>
                 <Collapse in={costMetricsExpanded}>
-                  <List dense>
-                    <ListItem><ListItemText primary="LLAMA Cost"   secondary={`$${result.resumes[0].estimatedCost}`}/></ListItem>
-                    <ListItem><ListItemText primary="Sovren Cost"  secondary={`$${result.resumes[0].sovrenComparison.sovrenCost.toFixed(4)}`}/></ListItem>
-                    <ListItem><ListItemText primary="Savings"      secondary={`$${result.resumes[0].sovrenComparison.savings} (${result.resumes[0].sovrenComparison.savingsPercentage}%)`}/></ListItem>
-                  </List>
+                  {(() => {
+                    if (settings.comparisonMode && result.resumes[0].models) {
+                      // Comparison mode - show costs for each model
+                      return result.resumes[0].models.map((model, index) => (
+                        <Box key={index} sx={{ mb: 2 }}>
+                          <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold' }}>
+                            {model.modelName}
+                          </Typography>
+                          <List dense>
+                            <ListItem><ListItemText primary="LLAMA Cost"   secondary={`$${model.estimatedCost}`}/></ListItem>
+                            <ListItem><ListItemText primary="Sovren Cost"  secondary={`$${model.sovrenComparison.sovrenCost.toFixed(4)}`}/></ListItem>
+                            <ListItem><ListItemText primary="Savings"      secondary={`$${model.sovrenComparison.savings} (${model.sovrenComparison.savingsPercentage}%)`}/></ListItem>
+                          </List>
+                        </Box>
+                      ));
+                    } else {
+                      // Single model mode
+                      return (
+                        <List dense>
+                          <ListItem><ListItemText primary="LLAMA Cost"   secondary={`$${result.resumes[0].estimatedCost}`}/></ListItem>
+                          <ListItem><ListItemText primary="Sovren Cost"  secondary={`$${result.resumes[0].sovrenComparison.sovrenCost.toFixed(4)}`}/></ListItem>
+                          <ListItem><ListItemText primary="Savings"      secondary={`$${result.resumes[0].sovrenComparison.savings} (${result.resumes[0].sovrenComparison.savingsPercentage}%)`}/></ListItem>
+                        </List>
+                      );
+                    }
+                  })()}
                 </Collapse>
               </Paper>
             )}
           </Grid>
           <Grid item xs={12} md={9}>
-            {result?.resumes.map((r,i)=><ResumeDetails key={i} resume={r} file={files[i]}/> )}
+            {result?.resumes.map((r,i)=>{
+              if (settings.comparisonMode && r.models) {
+                // Comparison mode - show results from both models
+                return (
+                  <ComparisonResumeView 
+                    key={i} 
+                    resume={r} 
+                    file={files[i]} 
+                    filename={r.filename}
+                  />
+                );
+              } else {
+                // Single model mode
+                return <ResumeDetails key={i} resume={r} file={files[i]} isComparisonMode={false} />;
+              }
+            })}
           </Grid>
         </Grid>
       </Container>
+
+      {/* Settings Dialog */}
+      <SettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={settings}
+        onSettingsChange={handleSettingsChange}
+      />
     </>
   );
 };

@@ -823,3 +823,4 @@ export const testExperienceCalculations = () => {
   
   return { job1Exp, totalExp, avgTenure };
 };
+
