@@ -1,6 +1,6 @@
-// src/UploadResume.js
+// src/UploadResumeFixed.js
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -46,7 +46,6 @@ import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import GitHubIcon   from '@mui/icons-material/GitHub';
 import TwitterIcon  from '@mui/icons-material/Twitter';
 import FacebookIcon from '@mui/icons-material/Facebook';
-import BusinessIcon from '@mui/icons-material/Business';
 import axios from 'axios';
 
 // Apps Script webhook URL
@@ -117,34 +116,7 @@ const calculateExperience = (startDate, endDate) => {
   } catch (error) {
     console.error('Error calculating job experience:', error);
     return { years: 0, months: 0, totalDays: 0 };
-    }
-};
-
-// Utility: Check if a job is trainee/intern role (should be ignored for employment gap calculations)
-const isTraineeOrIntern = (job) => {
-  if (!job) return false;
-  
-  const title = (job.title || '').toLowerCase();
-  const description = (job.work_description || '').toLowerCase();
-  
-  // Common trainee/intern keywords
-  const traineeKeywords = [
-    'trainee', 'intern', 'internship', 'apprentice', 'student', 'co-op', 'coop',
-    'summer intern', 'winter intern', 'fall intern', 'spring intern',
-    'graduate trainee', 'management trainee', 'engineering trainee'
-  ];
-  
-  // Check if title contains trainee/intern keywords
-  const hasTraineeTitle = traineeKeywords.some(keyword => title.includes(keyword));
-  
-  // Check if description contains trainee/intern keywords
-  const hasTraineeDescription = traineeKeywords.some(keyword => description.includes(keyword));
-  
-  // Check if duration is very short (likely internship)
-  const jobDuration = calculateExperience(job.work_start_date, job.is_currently_working ? 'Present' : job.work_end_date);
-  const isShortDuration = jobDuration.totalDays < 180; // Less than 6 months
-  
-  return hasTraineeTitle || hasTraineeDescription || isShortDuration;
+  }
 };
 
 // Utility: Calculate total experience considering overlaps and gaps
@@ -275,20 +247,6 @@ const ResumeDetails = ({ resume, file }) => {
   const [snackbarOpen, setSnackbarOpen]       = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [experienceLoading, setExperienceLoading] = useState(true);
-  const [parsedData, setParsedData] = useState(null);
-  const [showEmploymentAnalysis, setShowEmploymentAnalysis] = useState(false);
-  const employmentAnalysisRef = useRef(null);
-
-  // Parse resume data and set up experience calculations
-  useEffect(() => {
-    try {
-      const data = JSON.parse(stripCodeFences(resume.data));
-      setParsedData(data);
-    } catch (error) {
-      console.error('Error parsing resume data:', error);
-      setParsedData(null);
-    }
-  }, [resume.data]);
 
   // whenever a new resume is passed in, clear out any old feedback UI
   useEffect(() => {
@@ -297,25 +255,29 @@ const ResumeDetails = ({ resume, file }) => {
     setCommentText('');
   }, [resume.filename]);
 
+  // Parse resume data first
+  let data;
+  try {
+    data = JSON.parse(stripCodeFences(resume.data));
+  } catch {
+    return null;
+  }
+
   // Memoize experience calculations to avoid recalculation on every render
   const experienceData = useMemo(() => {
-    if (!parsedData?.workHistory) {
-      return { totalExp: { years: 0, months: 0 }, avgTenure: { years: 0, months: 0 } };
-    }
-
     try {
       setExperienceLoading(true);
       
-      console.log('Starting experience calculations for:', parsedData.workHistory);
+      console.log('Starting experience calculations for:', data?.workHistory);
       
-      const totalExp = calculateTotalExperience(parsedData.workHistory);
-      const avgTenure = calculateAverageTenure(parsedData.workHistory);
+      const totalExp = calculateTotalExperience(data?.workHistory);
+      const avgTenure = calculateAverageTenure(data?.workHistory);
       
       console.log('Experience calculation results:', {
         totalExperience: totalExp,
         averageTenure: avgTenure,
-        workHistoryCount: parsedData.workHistory.length,
-        workHistory: parsedData.workHistory
+        workHistoryCount: data?.workHistory?.length || 0,
+        workHistory: data?.workHistory
       });
       
       setExperienceLoading(false);
@@ -325,21 +287,7 @@ const ResumeDetails = ({ resume, file }) => {
       setExperienceLoading(false);
       return { totalExp: { years: 0, months: 0 }, avgTenure: { years: 0, months: 0 } };
     }
-  }, [parsedData?.workHistory]);
-
-  // If data is not parsed yet, show loading
-  if (!parsedData) {
-    return (
-      <Card variant="outlined" sx={{ mt: 2 }}>
-        <CardContent>
-          <CircularProgress />
-          <Typography>Loading resume data...</Typography>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const data = parsedData;
+  }, [data?.workHistory]);
 
   // metrics
   const extractionTime = (resume.timeMetrics.extractionTime / 1000).toFixed(2);
@@ -386,7 +334,7 @@ const ResumeDetails = ({ resume, file }) => {
     setShowCommentBox(false);
     setSnackbarMessage(isPositive
       ? 'Thanks for your feedback! :)'
-      : 'Thanks for the feedback - we\'ll look into it.');
+      : 'Thanks for the feedback — we'll look into it.');
     setSnackbarOpen(true);
   };
 
@@ -416,6 +364,104 @@ const ResumeDetails = ({ resume, file }) => {
                 `${experienceData.totalExp.years} yrs, ${experienceData.totalExp.months} mos`
               )}
             </Typography>
+            
+            {/* Average Tenure Highlight */}
+            {experienceData.avgTenure.years > 0 || experienceData.avgTenure.months > 0 ? (
+              <Typography variant="body2" sx={{ 
+                mt: 1, 
+                p: 1, 
+                bgcolor: 'primary.light', 
+                color: 'white', 
+                borderRadius: 1,
+                display: 'inline-block'
+              }}>
+                📊 Avg Tenure: {experienceData.avgTenure.years > 0 ? `${experienceData.avgTenure.years}y ` : ''}{experienceData.avgTenure.months}m per role
+              </Typography>
+            ) : null}
+            
+            {/* Employment Analysis */}
+            {(() => {
+              if (!data.workHistory || data.workHistory.length === 0) return null;
+              
+              const sortedJobs = [...data.workHistory].sort((a, b) => {
+                const startA = parseDate(a.work_start_date);
+                const startB = parseDate(b.work_start_date);
+                return startA - startB;
+              });
+              
+              let gaps = [];
+              let overlaps = [];
+              
+              for (let i = 0; i < sortedJobs.length - 1; i++) {
+                const currentJob = sortedJobs[i];
+                const nextJob = sortedJobs[i + 1];
+                
+                const currentEnd = currentJob.is_currently_working ? new Date() : parseDate(currentJob.work_end_date);
+                const nextStart = parseDate(nextJob.work_start_date);
+                
+                if (currentEnd && nextStart) {
+                  const gap = (nextStart - currentEnd) / (1000 * 60 * 60 * 24);
+                  
+                  if (gap > 30) {
+                    gaps.push({
+                      from: currentEnd,
+                      to: nextStart,
+                      days: Math.ceil(gap)
+                    });
+                  } else if (gap < -1) {
+                    overlaps.push({
+                      job1: currentJob.title,
+                      job2: nextJob.title,
+                      days: Math.abs(Math.ceil(gap))
+                    });
+                  }
+                }
+              }
+              
+              return (
+                <Box sx={{ mt: 1 }}>
+                  {/* Experience Summary */}
+                  <Typography variant="caption" sx={{ 
+                    display: 'block', 
+                    color: 'info.main',
+                    bgcolor: 'info.light',
+                    p: 0.5,
+                    borderRadius: 0.5,
+                    mb: 0.5
+                  }}>
+                    📋 {data.workHistory.length} position{data.workHistory.length > 1 ? 's' : ''} • 
+                    {(() => {
+                      const currentJobs = data.workHistory.filter(job => job.is_currently_working);
+                      return currentJobs.length > 0 ? ` ${currentJobs.length} current` : '';
+                    })()}
+                  </Typography>
+                  
+                  {gaps.length > 0 && (
+                    <Typography variant="caption" sx={{ 
+                      display: 'block', 
+                      color: 'warning.main',
+                      bgcolor: 'warning.light',
+                      p: 0.5,
+                      borderRadius: 0.5,
+                      mb: 0.5
+                    }}>
+                      ⚠️ {gaps.length} employment gap{gaps.length > 1 ? 's' : ''} detected
+                    </Typography>
+                  )}
+                  {overlaps.length > 0 && (
+                    <Typography variant="caption" sx={{ 
+                      display: 'block', 
+                      color: 'error.main',
+                      bgcolor: 'error.light',
+                      p: 0.5,
+                      borderRadius: 0.5
+                    }}>
+                      ⚠️ {overlaps.length} overlapping employment period{overlaps.length > 1 ? 's' : ''} detected
+                    </Typography>
+                  )}
+                </Box>
+              );
+            })()}
             
             {/* inline contact */}
             <Typography variant="body2" color="textSecondary" sx={{
@@ -449,347 +495,6 @@ const ResumeDetails = ({ resume, file }) => {
             </IconButton>
           </Box>
         </Box>
-
-                {/* Experience Analysis Section */}
-        <Box sx={{ 
-          px: 2, 
-          py: 2, 
-          borderTop: '1px solid #e0e0e0',
-          borderBottom: '1px solid #e0e0e0',
-          bgcolor: '#f5f5f5'
-        }}>
-          <Grid container spacing={2} alignItems="center">
-            {/* First Row: Key Metrics with Separators */}
-            <Grid item xs={12}>
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: 2
-              }}>
-                {/* Avg Tenure */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <AccessTime fontSize="small" color="action" />
-                  <Typography variant="body2" color="textSecondary">
-                    Avg Tenure: <strong>{experienceData.avgTenure.years > 0 ? `${experienceData.avgTenure.years}y ` : ''}{experienceData.avgTenure.months}m</strong> per role
-                  </Typography>
-                </Box>
-                
-                {/* Separator */}
-                <Box component="span" sx={{ color: 'text.disabled' }}>|</Box>
-                
-                {/* Average Tenure Per Company */}
-                {(() => {
-                  if (!data.workHistory || data.workHistory.length === 0) return null;
-                  
-                  // Group jobs by company and calculate average tenure per company
-                  const companyGroups = {};
-                  data.workHistory.forEach(job => {
-                    const companyName = job.work_company_name || 'Unknown Company';
-                    if (!companyGroups[companyName]) {
-                      companyGroups[companyName] = [];
-                    }
-                    companyGroups[companyName].push(job);
-                  });
-                  
-                  // Calculate average tenure per company
-                  let totalCompanyTenure = 0;
-                  let companyCount = 0;
-                  
-                  Object.values(companyGroups).forEach(companyJobs => {
-                    if (companyJobs.length > 0) {
-                      const companyTenure = companyJobs.reduce((total, job) => {
-                        const jobExperience = calculateExperience(job.work_start_date, job.is_currently_working ? 'Present' : job.work_end_date);
-                        return total + (jobExperience.years * 12 + jobExperience.months);
-                      }, 0);
-                      totalCompanyTenure += companyTenure;
-                      companyCount++;
-                    }
-                  });
-                  
-                  const avgCompanyTenure = companyCount > 0 ? totalCompanyTenure / companyCount : 0;
-                  const avgCompanyYears = Math.floor(avgCompanyTenure / 12);
-                  const avgCompanyMonths = Math.floor(avgCompanyTenure % 12);
-                  
-                  return (
-                    <>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <BusinessIcon fontSize="small" color="action" />
-                        <Typography variant="body2" color="textSecondary">
-                          Avg Company: <strong>{avgCompanyYears > 0 ? `${avgCompanyYears}y ` : ''}{avgCompanyMonths}m</strong> per company
-                        </Typography>
-                      </Box>
-                      
-                      {/* Separator */}
-                      <Box component="span" sx={{ color: 'text.disabled' }}>|</Box>
-                    </>
-                  );
-                })()}
-                
-                {/* Experience Summary */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Work fontSize="small" color="action" />
-                  <Typography variant="body2" color="textSecondary">
-                    <strong>{data.workHistory?.length || 0}</strong> position{data.workHistory?.length !== 1 ? 's' : ''}
-                    {(() => {
-                      const currentJobs = data.workHistory?.filter(job => job.is_currently_working) || [];
-                      return currentJobs.length > 0 ? ` (${currentJobs.length} current)` : '';
-                    })()}
-                  </Typography>
-                </Box>
-              </Box>
-            </Grid>
-            
-            {/* Second Row: Employment Analysis Toggle - Only render if there are issues */}
-            {(() => {
-              if (!data.workHistory || data.workHistory.length === 0) return null;
-              
-              const sortedJobs = [...data.workHistory].sort((a, b) => {
-                const startA = parseDate(a.work_start_date);
-                const startB = parseDate(b.work_start_date);
-                return startA - startB;
-              });
-              
-              let gaps = [];
-              let overlaps = [];
-              
-              for (let i = 0; i < sortedJobs.length - 1; i++) {
-                const currentJob = sortedJobs[i];
-                const nextJob = sortedJobs[i + 1];
-                
-                // Skip trainee/intern roles for gap calculation
-                const isCurrentJobTrainee = isTraineeOrIntern(currentJob);
-                const isNextJobTrainee = isTraineeOrIntern(nextJob);
-                
-                const currentEnd = currentJob.is_currently_working ? new Date() : parseDate(currentJob.work_end_date);
-                const nextStart = parseDate(nextJob.work_start_date);
-                
-                if (currentEnd && nextStart) {
-                  const gap = (nextStart - currentEnd) / (1000 * 60 * 60 * 24);
-                  
-                  // Only count gaps if neither job is trainee/intern
-                  if (gap > 30 && !isCurrentJobTrainee && !isNextJobTrainee) {
-                    gaps.push({
-                      from: currentEnd,
-                      to: nextStart,
-                      days: Math.ceil(gap),
-                      fromJob: currentJob,
-                      toJob: nextJob
-                    });
-                  } else if (gap < -1) {
-                    overlaps.push({
-                      job1: currentJob,
-                      job2: nextJob,
-                      days: Math.abs(Math.ceil(gap))
-                    });
-                  }
-                }
-              }
-              
-              const hasIssues = gaps.length > 0 || overlaps.length > 0;
-              
-              return hasIssues ? (
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      startIcon={showEmploymentAnalysis ? <ExpandLess /> : <ExpandMore />}
-                      onClick={() => {
-                        const newState = !showEmploymentAnalysis;
-                        setShowEmploymentAnalysis(newState);
-                        if (newState && employmentAnalysisRef.current) {
-                          setTimeout(() => {
-                            employmentAnalysisRef.current.scrollIntoView({ 
-                              behavior: 'smooth', 
-                              block: 'start' 
-                            });
-                          }, 100);
-                        }
-                      }}
-                      sx={{ 
-                        textTransform: 'none',
-                        color: 'text.secondary',
-                        borderColor: '#e0e0e0',
-                        '&:hover': {
-                          borderColor: 'primary.main',
-                          color: 'primary.main'
-                        }
-                      }}
-                    >
-                      {gaps.length > 0 && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Box sx={{ 
-                            width: 8, 
-                            height: 8, 
-                            borderRadius: '50%', 
-                            bgcolor: 'warning.main',
-                            display: 'inline-block'
-                          }} />
-                          {gaps.length} employment gap{gaps.length > 1 ? 's' : ''} detected
-                        </Box>
-                      )}
-                      {gaps.length > 0 && overlaps.length > 0 && ' & '}
-                      {overlaps.length > 0 && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Box sx={{ 
-                            width: 8, 
-                            height: 8, 
-                            borderRadius: '50%', 
-                            bgcolor: 'error.main',
-                            display: 'inline-block'
-                          }} />
-                          {overlaps.length} overlap{gaps.length > 1 ? 's' : ''} detected
-                        </Box>
-                      )}
-                    </Button>
-                  </Box>
-                </Grid>
-              ) : null;
-            })()}
-          </Grid>
-        </Box>
-
-        {/* Inline Employment Analysis Details */}
-        <div ref={employmentAnalysisRef}>
-        {showEmploymentAnalysis && (() => {
-          if (!data.workHistory || data.workHistory.length === 0) return null;
-          
-          const sortedJobs = [...data.workHistory].sort((a, b) => {
-            const startA = parseDate(a.work_start_date);
-            const startB = parseDate(b.work_start_date);
-            return startA - startB;
-          });
-          
-          let gaps = [];
-          let overlaps = [];
-          
-          for (let i = 0; i < sortedJobs.length - 1; i++) {
-            const currentJob = sortedJobs[i];
-            const nextJob = sortedJobs[i + 1];
-            
-            const currentEnd = currentJob.is_currently_working ? new Date() : parseDate(currentJob.work_end_date);
-            const nextStart = parseDate(nextJob.work_start_date);
-            
-            if (currentEnd && nextStart) {
-              const gap = (nextStart - currentEnd) / (1000 * 60 * 60 * 24);
-              
-              if (gap > 30) {
-                gaps.push({
-                  from: currentEnd,
-                  to: nextStart,
-                  days: Math.ceil(gap),
-                  fromJob: currentJob,
-                  toJob: nextJob
-                });
-              } else if (gap < -1) {
-                overlaps.push({
-                  job1: currentJob,
-                  job2: nextJob,
-                  days: Math.abs(Math.ceil(gap))
-                });
-              }
-            }
-          }
-          
-          return (
-            <Box sx={{ 
-              px: 2, 
-              py: 1.5, 
-              borderTop: '1px solid #e0e0e0',
-              bgcolor: '#f8f9fa'
-            }}>
-              {/* Employment Gaps */}
-              {gaps.length > 0 && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box sx={{ 
-                      width: 8, 
-                      height: 8, 
-                      borderRadius: '50%', 
-                      bgcolor: 'warning.main'
-                    }} />
-                    Employment Gaps ({gaps.length})
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block', fontStyle: 'italic' }}>
-                    Note: Only significant employment gaps between professional roles are shown. Internships and trainee positions are excluded.
-                  </Typography>
-                  {gaps.map((gap, index) => {
-                    const formatDate = (date) => date.toLocaleDateString('en-US', { 
-                      year: 'numeric', 
-                      month: 'short', 
-                      day: 'numeric' 
-                    });
-                    
-                    const gapYears = Math.floor(gap.days / 365.25);
-                    const gapMonths = Math.floor((gap.days % 365.25) / 30.44);
-                    
-                    return (
-                      <Paper key={index} variant="outlined" sx={{ p: 1.5, mb: 1 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                          <Typography variant="body2" fontWeight="medium">
-                            Gap {index + 1}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {gapYears > 0 ? `${gapYears}y ` : ''}{gapMonths}m ({gap.days} days)
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                          <strong>From:</strong> {gap.fromJob.title} at {gap.fromJob.work_company_name} 
-                          ({formatDate(gap.from)})
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          <strong>To:</strong> {gap.toJob.title} at {gap.toJob.work_company_name} 
-                          ({formatDate(gap.to)})
-                        </Typography>
-                      </Paper>
-                    );
-                  })}
-                </Box>
-              )}
-              
-              {/* Employment Overlaps */}
-              {overlaps.length > 0 && (
-                <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box sx={{ 
-                      width: 8, 
-                      height: 8, 
-                      borderRadius: '50%', 
-                      bgcolor: 'error.main'
-                    }} />
-                    Overlapping Employment ({overlaps.length})
-                  </Typography>
-                  {overlaps.map((overlap, index) => {
-                    const overlapYears = Math.floor(overlap.days / 365.25);
-                    const overlapMonths = Math.floor((overlap.days % 365.25) / 30.44);
-                    
-                    return (
-                      <Paper key={index} variant="outlined" sx={{ p: 1.5, mb: 1 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                          <Typography variant="body2" fontWeight="medium">
-                            Overlap {index + 1}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {overlapYears > 0 ? `${overlapYears}y ` : ''}{overlapMonths}m ({overlap.days} days)
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                          <strong>Job 1:</strong> {overlap.job1.title} at {overlap.job1.work_company_name}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          <strong>Job 2:</strong> {overlap.job2.title} at {overlap.job2.work_company_name}
-                        </Typography>
-                      </Paper>
-                    );
-                  })}
-                </Box>
-              )}
-            </Box>
-          );
-        })()}
-        </div>
 
         <CardContent sx={{ px: 2, py: 1 }}>
           {/* comment textarea only on thumbs-down */}
@@ -946,8 +651,6 @@ const ResumeDetails = ({ resume, file }) => {
             </Grid>
           </Grid>
         </CardContent>
-        
-
       </Card>
 
       {/* Feedback Snackbar */}
